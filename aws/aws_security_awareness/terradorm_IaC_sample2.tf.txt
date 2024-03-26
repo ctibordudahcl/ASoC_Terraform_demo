@@ -1,0 +1,114 @@
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_s3_bucket" "vulnerable_bucket" {
+  bucket = "extremely-insecure-bucket"
+  acl    = "public-read-write" # Vulnerability 1: Publicly writable bucket
+
+  versioning {
+    enabled = false # Vulnerability 2: Versioning not enabled
+  }
+
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm = "AES256" # Vulnerability 3: Prefer using AWS KMS-managed keys for better security
+      }
+    }
+  } # Vulnerability 4: Encryption without using KMS keys
+
+  lifecycle_rule {
+    enabled = false # Vulnerability 5: Lifecycle management not enabled
+  }
+}
+
+resource "aws_security_group" "vulnerable_sg" {
+  name        = "extremely-insecure-sg"
+  description = "Extremely Insecure security group"
+  vpc_id      = aws_vpc.vulnerable_vpc.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # Vulnerability 6: SSH open to the world
+  }
+
+  ingress {
+    from_port   = 3389
+    to_port     = 3389
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # Vulnerability 7: RDP open to the world
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1" # Vulnerability 8: Allows all outbound traffic
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_vpc" "vulnerable_vpc" {
+  cidr_block = "10.0.0.0/16" # Vulnerability 9: Default VPC without specific security considerations
+  enable_dns_support = true  # Could be considered a vulnerability if DNS support is not required
+}
+
+resource "aws_rds_cluster" "vulnerable_cluster" {
+  cluster_identifier      = "vulnerable-cluster"
+  engine                  = "aurora"
+  engine_version          = "5.6.10a"
+  master_username         = "admin"
+  master_password         = "anothersecretpassword" # Vulnerability 10: Hardcoded master password
+  skip_final_snapshot     = true # Vulnerability 11: No final snapshot
+  publicly_accessible     = true # Vulnerability 12: Cluster publicly accessible
+}
+
+resource "aws_iam_user" "vulnerable_user" {
+  name = "extremely_insecure_user"
+  # Vulnerability 13: IAM user without MFA enabled
+}
+
+resource "aws_iam_access_key" "vulnerable_user_key" {
+  user    = aws_iam_user.vulnerable_user.name # Vulnerability 14: Static IAM user keys with no rotation policy
+}
+
+resource "aws_iam_policy" "vulnerable_policy" {
+  name        = "InsecurePolicy"
+  description = "A policy that allows everything"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "*"
+      Resource = "*"
+      Effect = "Allow"
+    }]
+  }) # Vulnerability 15: Overly permissive IAM policy
+}
+
+resource "aws_instance" "vulnerable_instance" {
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = "t2.micro"
+  key_name      = "insecure-key" # Vulnerability 16: Use of insecure or shared SSH keys
+
+  user_data = <<-EOT # Vulnerability 17: Sensitive data in user_data
+  #!/bin/bash
+  echo "admin:anotherinsecurepassword" | chpasswd
+  EOT
+
+  vpc_security_group_ids = [aws_security_group.vulnerable_sg.id]
+
+  tags = {
+    Name = "Vulnerable Instance"
+  }
+}
+
+resource "aws_elastic_ip" "vulnerable_eip" {
+  instance = aws_instance.vulnerable_instance.id # Vulnerability 18: Elastic IP associated with a potentially vulnerable instance
+}
+
+resource "aws_sqs_queue" "vulnerable_queue" {
+  name                      = "vulnerable-queue"
+  delay_seconds             = 90
+  message
